@@ -60,14 +60,14 @@
       line-height: 1.4;
     }
 
-    /* ===== Header Logo (NEW) ===== */
+    /* ===== Header Logo ===== */
     .header-logo{
       display:inline-flex;
       align-items:center;
       justify-content:center;
       padding: 6px 10px;
       border-radius: 12px;
-      background: rgba(255,255,255,0.14); /* 투명 PNG 가독성 */
+      background: rgba(255,255,255,0.14);
       border: 1px solid rgba(255,255,255,0.18);
       text-decoration:none;
       transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
@@ -79,7 +79,7 @@
       box-shadow: 0 10px 18px rgba(0,0,0,0.18);
     }
     .header-logo img{
-      height: 34px;  /* 로고 크기 조절 */
+      height: 34px;
       width: auto;
       display:block;
     }
@@ -163,6 +163,50 @@
     .btn:active {
       transform: translateY(0px);
       box-shadow: none;
+    }
+
+    /* ===== Toggle Button ===== */
+    .toggle-container {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .toggle-label {
+      font-weight: 700;
+      font-size: 13px;
+      color: #374151;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 52px;
+      height: 28px;
+      background: #e5e7eb;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    .toggle-switch.active {
+      background: #667eea;
+    }
+    .toggle-knob {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .toggle-switch.active .toggle-knob {
+      transform: translateX(24px);
+    }
+    .toggle-status {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 600;
     }
 
     .hint {
@@ -259,17 +303,15 @@
 <body>
   <div class="container">
     <div class="header">
-      <!-- NEW: header-inner 구조 + 우측 로고 -->
       <div class="header-inner">
         <div class="header-text">
           <h1>지역별 환경보건 취약지수 시각화 맵</h1>
           <p>행정동별 지표를 선택해 단계형 색상 지도로 확인합니다.</p>
         </div>
 
-        <!-- 로고 파일: ./assets/logo.png (레포에 assets 폴더 만들고 넣기) -->
-        <!-- 링크 필요 없으면 href="#" 로 두거나 <div>로 변경 -->
-        <a class="header-logo" href="https://example.com" target="_blank" rel="noopener">
-          <img src="./assets/logo.png" alt="Company Logo" />
+        <!-- 울산연구원 로고 - 클릭 시 사이트로 이동 -->
+        <a class="header-logo" href="https://www.uri.re.kr/" target="_blank" rel="noopener">
+          <img src="./assets/logo.png" alt="울산연구원 로고" />
         </a>
       </div>
     </div>
@@ -285,12 +327,19 @@
           <label class="label" for="varSelect">변수 선택</label>
           <select id="varSelect"></select>
 
-          <label class="label" for="kSelect">구간 수 (Natural Breaks)</label>
-          <select id="kSelect">
-            <option value="10" selected>10</option>
-            <option value="7">7</option>
-            <option value="5">5</option>
-          </select>
+          <!-- 정규화 ON/OFF 토글 -->
+          <div class="toggle-container">
+            <span class="toggle-label">정규화</span>
+            <div class="toggle-switch" id="normalizeToggle">
+              <div class="toggle-knob"></div>
+            </div>
+            <span class="toggle-status" id="normalizeStatus">OFF</span>
+          </div>
+
+          <div class="hint" style="margin-top: 12px;">
+            <div>※ 정규화 ON: 모든 변수를 1~10 범위로 변환하여 비교 가능</div>
+            <div style="margin-top:6px;">※ 정규화 OFF: 원본 데이터 값 그대로 표시</div>
+          </div>
 
           <div class="hint" style="margin-top: 12px;">
             <div>데이터 파일: <code>ulsan_dong_indicators.geojson</code></div>
@@ -317,9 +366,10 @@
   <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
 
   <script>
-    // ====== 기존 지도 로직(유지) ======
+    // ====== 설정 ======
     const GEOJSON_URL = "./ulsan_dong_indicators.geojson";
     const NAME_FIELD = "ADM_NM";
+    const K_VALUE = 10; // 고정값
 
     let map = L.map("map").setView([35.55, 129.30], 11);
     const base = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
@@ -329,6 +379,7 @@
     let geoLayer = null;
     let legendControl = null;
     let geoData = null;
+    let isNormalized = false; // 정규화 상태
 
     function getColor(idx, k) {
       const ramps = {
@@ -342,12 +393,34 @@
 
     function fmt(v) {
       if (v === null || v === undefined || Number.isNaN(v)) return "NA";
-      const n = Math.round(v);
-      return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      const n = parseFloat(v);
+      if (isNormalized) {
+        return n.toFixed(2); // 정규화된 값은 소수점 2자리
+      }
+      return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
 
     function computeNaturalBreaks(values, k) {
       return ss.jenks(values, k); // 길이 k+1 경계
+    }
+
+    // Min-Max 정규화 함수 (1~10 범위)
+    function normalizeToRange(values) {
+      const validVals = values.filter(v => v !== null && v !== undefined && !Number.isNaN(v));
+      if (validVals.length === 0) return values;
+      
+      const minVal = Math.min(...validVals);
+      const maxVal = Math.max(...validVals);
+      
+      if (minVal === maxVal) {
+        // 모든 값이 같으면 중간값(5.5) 반환
+        return values.map(v => (v !== null && v !== undefined && !Number.isNaN(v)) ? 5.5 : v);
+      }
+      
+      return values.map(v => {
+        if (v === null || v === undefined || Number.isNaN(v)) return v;
+        return 1 + ((v - minVal) / (maxVal - minVal)) * 9;
+      });
     }
 
     function buildLegend(breaks, k, varName) {
@@ -356,7 +429,8 @@
       legendControl = L.control({ position: "bottomright" });
       legendControl.onAdd = function () {
         const div = L.DomUtil.create("div", "legend");
-        div.innerHTML = `<div class="title">${varName}</div>`;
+        const displayName = isNormalized ? `${varName} (정규화 1~10)` : varName;
+        div.innerHTML = `<div class="title">${displayName}</div>`;
         for (let i = 0; i < k; i++) {
           const from = breaks[i];
           const to = breaks[i + 1];
@@ -374,7 +448,13 @@
     }
 
     function styleFeature(feature, varName, breaks, k) {
-      const v = feature.properties[varName];
+      let v = feature.properties[varName];
+      
+      // 정규화된 값 사용 (미리 계산되어 properties에 저장됨)
+      if (isNormalized && feature.properties[varName + '_normalized'] !== undefined) {
+        v = feature.properties[varName + '_normalized'];
+      }
+      
       if (v === null || v === undefined || Number.isNaN(v)) {
         return { color: "#9ca3af", weight: 1, fillOpacity: 0.25, fillColor: "#e5e7eb" };
       }
@@ -385,20 +465,35 @@
       return { color: "#6b7280", weight: 1, fillOpacity: 0.78, fillColor: getColor(idx, k) };
     }
 
-    function render(varName, k) {
+    function render(varName) {
       if (!geoData) return;
 
-      const vals = geoData.features
+      // 원본 값 추출
+      const rawVals = geoData.features
         .map(f => f.properties[varName])
         .filter(v => typeof v === "number" && !Number.isNaN(v));
 
-      if (vals.length === 0) {
+      if (rawVals.length === 0) {
         alert(`'${varName}' 변수에 유효한 숫자값이 없습니다.`);
         return;
       }
 
+      // 정규화 적용
+      let vals = rawVals;
+      if (isNormalized) {
+        const allVals = geoData.features.map(f => f.properties[varName]);
+        const normalized = normalizeToRange(allVals);
+        
+        // 정규화된 값을 각 feature의 properties에 임시 저장
+        geoData.features.forEach((f, idx) => {
+          f.properties[varName + '_normalized'] = normalized[idx];
+        });
+        
+        vals = normalized.filter(v => typeof v === "number" && !Number.isNaN(v));
+      }
+
       const uniq = Array.from(new Set(vals)).length;
-      const kEff = Math.max(2, Math.min(k, uniq));
+      const kEff = Math.max(2, Math.min(K_VALUE, uniq));
       const breaks = computeNaturalBreaks(vals, kEff); // kEff+1
 
       if (geoLayer) geoLayer.remove();
@@ -407,8 +502,16 @@
         style: (f) => styleFeature(f, varName, breaks, kEff),
         onEachFeature: (feature, layer) => {
           const nm = feature.properties[NAME_FIELD] ?? "";
-          const v = feature.properties[varName];
-          layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${fmt(v)}`, { sticky: true });
+          let v = feature.properties[varName];
+          let displayValue = v;
+          
+          // 툴팁에 표시할 값 결정
+          if (isNormalized && feature.properties[varName + '_normalized'] !== undefined) {
+            displayValue = feature.properties[varName + '_normalized'];
+          }
+          
+          const label = isNormalized ? `${varName} (정규화)` : varName;
+          layer.bindTooltip(`<b>${nm}</b><br/>${label}: ${fmt(displayValue)}`, { sticky: true });
         }
       }).addTo(map);
 
@@ -421,7 +524,11 @@
 
     function populateVarsFromGeoJSON(geojson) {
       const props = geojson.features?.[0]?.properties || {};
-      const candidates = Object.keys(props).filter(k => k !== NAME_FIELD && k !== "join_key");
+      const candidates = Object.keys(props).filter(k => 
+        k !== NAME_FIELD && 
+        k !== "join_key" && 
+        !k.endsWith("_normalized") // 정규화된 임시 필드 제외
+      );
       const vars = candidates.filter(vn =>
         geojson.features.some(f => typeof f.properties[vn] === "number" && !Number.isNaN(f.properties[vn]))
       );
@@ -433,8 +540,9 @@
       geoData = await res.json();
 
       const varSelect = document.getElementById("varSelect");
-      const kSelect = document.getElementById("kSelect");
       const resetBtn = document.getElementById("resetBtn");
+      const normalizeToggle = document.getElementById("normalizeToggle");
+      const normalizeStatus = document.getElementById("normalizeStatus");
 
       const vars = populateVarsFromGeoJSON(geoData);
       if (vars.length === 0) {
@@ -447,12 +555,22 @@
       const defaultVar = vars.includes("인구밀도") ? "인구밀도" : vars[0];
       varSelect.value = defaultVar;
 
-      render(defaultVar, parseInt(kSelect.value, 10));
+      render(defaultVar);
 
-      varSelect.addEventListener("change", () => render(varSelect.value, parseInt(kSelect.value, 10)));
-      kSelect.addEventListener("change", () => render(varSelect.value, parseInt(kSelect.value, 10)));
+      // 변수 선택 변경 시
+      varSelect.addEventListener("change", () => render(varSelect.value));
+
+      // 지도 초기화 버튼
       resetBtn.addEventListener("click", () => {
         if (geoLayer) map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
+      });
+
+      // 정규화 토글
+      normalizeToggle.addEventListener("click", () => {
+        isNormalized = !isNormalized;
+        normalizeToggle.classList.toggle("active");
+        normalizeStatus.textContent = isNormalized ? "ON" : "OFF";
+        render(varSelect.value);
       });
     }
 
