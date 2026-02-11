@@ -357,7 +357,7 @@
           </div>
 
           <div class="hint" style="margin-top: 12px;">
-            <div>※ 정규화 ON: 0~10 점수를 1~10 level로 표시</div>
+            <div>※ 정규화 ON: 각 변수별 점수를 1~10 level로 표시(실제 점수는 0~10 사이의 실수)</div>
             <div style="margin-top:6px;">※ 정규화 OFF: 원본 데이터 값 그대로 표시</div>
           </div>
         </div>
@@ -380,7 +380,7 @@
 
           <div class="hint" style="margin-top: 12px;">
             <div>※ 각 도메인별 변수들의 평균 점수</div>
-            <div style="margin-top:6px;">※ 소수점 한자리로 표시(반올림)</div>
+            <div style="margin-top:6px;">※ 소수점 한자리 표시(반올림)</div>
           </div>
         </div>
 
@@ -510,9 +510,9 @@
     // 도메인용 색상 팔레트 (연한 황색 -> 푸른색)
     function getDomainColor(idx, k) {
       const ramps = {
-        5:  ["#ffffcc","#c7e9c0","#a1d99b","#74c476","#238b45"],
-        7:  ["#ffffcc","#d9f0a3","#addd8e","#78c679","#41ab5d","#238b45","#005a32"],
-        10: ["#ffffcc","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238b45","#006d2c","#00441b","#003d19"]
+        5:  ["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"],
+        7:  ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
+        10: ["#ffffcc","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#253494","#081d58","#042040"]
       };
       const pal = ramps[k] || ramps[10];
       return pal[Math.min(idx, pal.length - 1)];
@@ -980,3 +980,4 @@
   </script>
 </body>
 </html>
+
