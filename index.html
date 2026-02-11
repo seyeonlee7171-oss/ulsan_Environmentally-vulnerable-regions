@@ -98,6 +98,7 @@
       background: #f8f9fa;
       border-right: 1px solid #e9ecef;
       min-height: 0;
+      overflow-y: auto;
     }
     .panel-card {
       background: #fff;
@@ -105,6 +106,7 @@
       border-radius: 12px;
       padding: 14px;
       box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+      margin-bottom: 14px;
     }
     .label {
       display: block;
@@ -170,6 +172,13 @@
     #exportBtn:hover {
       background: #059669;
       box-shadow: 0 10px 18px rgba(16,185,129,0.28);
+    }
+    #vulnerabilityBtn {
+      background: #ef4444;
+    }
+    #vulnerabilityBtn:hover {
+      background: #dc2626;
+      box-shadow: 0 10px 18px rgba(239,68,68,0.28);
     }
 
     /* ===== Toggle Button ===== */
@@ -325,13 +334,13 @@
 
     <div class="content">
       <aside class="panel">
+        <!-- 개별 변수 선택 카드 -->
         <div class="panel-card">
           <div class="row" style="margin-bottom: 6px;">
-            <span class="pill">INTERACTIVE</span>
-            <span class="hint" style="margin-top:0;">드롭다운에서 변수를 바꾸면 지도가 즉시 갱신됩니다.</span>
+            <span class="pill">변수</span>
           </div>
 
-          <label class="label" for="varSelect">변수 선택</label>
+          <label class="label" for="varSelect">개별 변수 선택</label>
           <select id="varSelect"></select>
 
           <!-- 정규화 ON/OFF 토글 -->
@@ -344,21 +353,61 @@
           </div>
 
           <div class="hint" style="margin-top: 12px;">
-            <div>※ 정규화 ON: 모든 변수를 1~10 범위로 변환하여 비교 가능</div>
+            <div>※ 정규화 ON: 0~10 점수를 1~10 level로 표시</div>
             <div style="margin-top:6px;">※ 정규화 OFF: 원본 데이터 값 그대로 표시</div>
           </div>
+        </div>
 
-          <div class="hint" style="margin-top: 12px;">
-            <div>데이터 파일: <code>ulsan_dong_indicators.geojson</code></div>
-            <div style="margin-top:6px;">※ 로딩이 느리면 GeoJSON 용량(geometry/속성)을 줄이는 방식으로 개선 가능합니다.</div>
+        <!-- 도메인 선택 카드 -->
+        <div class="panel-card">
+          <div class="row" style="margin-bottom: 6px;">
+            <span class="pill">도메인</span>
           </div>
 
-          <div style="margin-top: 14px;">
+          <label class="label" for="domainSelect">도메인별 점수</label>
+          <select id="domainSelect">
+            <option value="">-- 도메인 선택 --</option>
+            <option value="환경압력">환경압력 (0~5점)</option>
+            <option value="환경수준">환경수준 (0~10점)</option>
+            <option value="환경보건수준">환경보건수준 (0~5점)</option>
+            <option value="민감인구">민감인구 (0~3점)</option>
+            <option value="사회경제적수준">사회경제적 수준 (0~3점)</option>
+          </select>
+
+          <div class="hint" style="margin-top: 12px;">
+            <div>※ 각 도메인별 변수들의 평균 점수</div>
+            <div style="margin-top:6px;">※ 소수점 한자리로 표시</div>
+          </div>
+        </div>
+
+        <!-- 환경보건 취약지수 카드 -->
+        <div class="panel-card">
+          <div class="row" style="margin-bottom: 6px;">
+            <span class="pill">종합</span>
+          </div>
+
+          <button class="btn" id="vulnerabilityBtn" type="button">
+            🎯 환경보건 취약지수 보기
+          </button>
+
+          <div class="hint" style="margin-top: 12px;">
+            <div>※ 환경압력 × (환경수준+환경보건수준) × (민감인구+사회경제수준)</div>
+            <div style="margin-top:6px;">※ 녹색(낮음) → 황색(중간) → 적색(높음)</div>
+          </div>
+        </div>
+
+        <!-- 기타 기능 카드 -->
+        <div class="panel-card">
+          <div style="margin-top: 0px;">
             <button class="btn" id="resetBtn" type="button">지도 초기화(전체보기)</button>
           </div>
 
           <div style="margin-top: 10px;">
-            <button class="btn" id="exportBtn" type="button" style="background: #10b981;">📸 이미지로 저장</button>
+            <button class="btn" id="exportBtn" type="button">📸 이미지로 저장</button>
+          </div>
+
+          <div class="hint" style="margin-top: 12px;">
+            <div>데이터 파일: <code>ulsan_dong_indicators.geojson</code></div>
           </div>
         </div>
       </aside>
@@ -378,6 +427,56 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <script>
+    // ====== 도메인별 변수 매핑 (필요시 수정) ======
+    const DOMAIN_MAPPING = {
+      "환경압력": [
+        "인구밀도(명/k㎡)",
+        "유동인구(명)",
+        "행정구역 내 산단 면적",
+        "환경오염물질배출 사업장 수(개)",
+        "제조업 종사자 수(명)",
+        "추정교통량(대/일)",
+        "차량주행거리(km)",
+        "도로길이(km)",
+        "유해물질 배출(CAPSS)"
+      ],
+      "환경수준": [
+        "PM 2.5 농도",
+        "NO2 농도",
+        "O3 농도",
+        "환경 소음"
+      ],
+      "환경보건수준": [
+        "천식 유병률",
+        "비염 유병률",
+        "COPD 유병률",
+        "아토피피부염유병률",
+        "결막염 유병률"
+      ],
+      "민감인구": [
+        "65세 이상 노령인구 비율",
+        "5세 미만 어린이 비율"
+      ],
+      "사회경제적수준": [
+        "노후건축물 현황",
+        "공원접근성",
+        "병원수",
+        "기초생활수급자 비율",
+        "초중고 학교 수",
+        "학원, 교습소 수",
+        "소득정도"
+      ]
+    };
+
+    // 도메인별 점수 범위
+    const DOMAIN_SCORES = {
+      "환경압력": { min: 0, max: 5 },
+      "환경수준": { min: 0, max: 10 },
+      "환경보건수준": { min: 0, max: 5 },
+      "민감인구": { min: 0, max: 3 },
+      "사회경제적수준": { min: 0, max: 3 }
+    };
+
     // ====== 설정 ======
     const GEOJSON_URL = "./ulsan_dong_indicators.geojson";
     const NAME_FIELD = "ADM_NM";
@@ -392,6 +491,7 @@
     let legendControl = null;
     let geoData = null;
     let isNormalized = false; // 정규화 상태
+    let currentMode = 'variable'; // 'variable', 'domain', 'vulnerability'
 
     function getColor(idx, k) {
       const ramps = {
@@ -403,9 +503,25 @@
       return pal[Math.min(idx, pal.length - 1)];
     }
 
-    function fmt(v) {
+    // 취약지수용 색상 팔레트 (녹색 -> 황색 -> 적색)
+    function getVulnerabilityColor(idx, k) {
+      const ramps = {
+        5:  ["#22c55e","#84cc16","#eab308","#f97316","#ef4444"],
+        7:  ["#22c55e","#65a30d","#84cc16","#eab308","#f97316","#f87171","#ef4444"],
+        10: ["#22c55e","#4ade80","#84cc16","#a3e635","#eab308","#fbbf24","#f97316","#fb923c","#ef4444","#dc2626"]
+      };
+      const pal = ramps[k] || ramps[10];
+      return pal[Math.min(idx, pal.length - 1)];
+    }
+
+    function fmt(v, isDomain = false) {
       if (v === null || v === undefined || Number.isNaN(v)) return "NA";
       const n = parseFloat(v);
+      
+      if (isDomain) {
+        return n.toFixed(1); // 도메인 점수는 소수점 1자리
+      }
+      
       if (isNormalized) {
         return Math.round(n).toString(); // 정규화된 값은 정수로 표시
       }
@@ -416,8 +532,8 @@
       return ss.jenks(values, k); // 길이 k+1 경계
     }
 
-    // Min-Max 정규화 함수 (1~10 범위)
-    function normalizeToRange(values) {
+    // Min-Max 정규화 함수 (0~10 범위)
+    function normalizeToRange(values, minRange = 0, maxRange = 10) {
       const validVals = values.filter(v => v !== null && v !== undefined && !Number.isNaN(v));
       if (validVals.length === 0) return values;
       
@@ -425,27 +541,88 @@
       const maxVal = Math.max(...validVals);
       
       if (minVal === maxVal) {
-        // 모든 값이 같으면 중간값(5.5) 반환
-        return values.map(v => (v !== null && v !== undefined && !Number.isNaN(v)) ? 5.5 : v);
+        // 모든 값이 같으면 중간값 반환
+        const midVal = (minRange + maxRange) / 2;
+        return values.map(v => (v !== null && v !== undefined && !Number.isNaN(v)) ? midVal : v);
       }
       
       return values.map(v => {
         if (v === null || v === undefined || Number.isNaN(v)) return v;
-        return 1 + ((v - minVal) / (maxVal - minVal)) * 9;
+        return minRange + ((v - minVal) / (maxVal - minVal)) * (maxRange - minRange);
       });
     }
 
-    function buildLegend(breaks, k, varName) {
+    // 도메인 점수 계산
+    function calculateDomainScores() {
+      if (!geoData) return;
+
+      geoData.features.forEach(feature => {
+        // 각 변수를 0~10으로 정규화
+        Object.keys(DOMAIN_MAPPING).forEach(domain => {
+          const vars = DOMAIN_MAPPING[domain];
+          const values = [];
+          
+          vars.forEach(varName => {
+            if (feature.properties[varName + '_normalized_0_10'] !== undefined) {
+              const val = feature.properties[varName + '_normalized_0_10'];
+              if (val !== null && val !== undefined && !Number.isNaN(val)) {
+                values.push(val);
+              }
+            }
+          });
+          
+          if (values.length > 0) {
+            // 평균 계산
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            
+            // 도메인별 점수 범위로 재정규화
+            const scoreRange = DOMAIN_SCORES[domain];
+            const domainScore = (avg / 10) * (scoreRange.max - scoreRange.min) + scoreRange.min;
+            
+            feature.properties['domain_' + domain] = domainScore;
+          } else {
+            feature.properties['domain_' + domain] = null;
+          }
+        });
+
+        // 환경보건 취약지수 계산
+        const envPressure = feature.properties['domain_환경압력'] || 0;
+        const envQuality = feature.properties['domain_환경수준'] || 0;
+        const envHealth = feature.properties['domain_환경보건수준'] || 0;
+        const sensitive = feature.properties['domain_민감인구'] || 0;
+        const socioEcon = feature.properties['domain_사회경제적수준'] || 0;
+        
+        const vulnerability = envPressure * (envQuality + envHealth) * (sensitive + socioEcon);
+        feature.properties['vulnerability_index'] = vulnerability;
+      });
+    }
+
+    // 모든 변수를 0~10으로 정규화
+    function normalizeAllVariables() {
+      if (!geoData) return;
+
+      const allVars = populateVarsFromGeoJSON(geoData);
+      
+      allVars.forEach(varName => {
+        const allVals = geoData.features.map(f => f.properties[varName]);
+        const normalized = normalizeToRange(allVals, 0, 10);
+        
+        geoData.features.forEach((f, idx) => {
+          f.properties[varName + '_normalized_0_10'] = normalized[idx];
+        });
+      });
+    }
+
+    function buildLegend(breaks, k, displayName, mode = 'variable') {
       if (legendControl) legendControl.remove();
 
       legendControl = L.control({ position: "bottomright" });
       legendControl.onAdd = function () {
         const div = L.DomUtil.create("div", "legend");
-        const displayName = varName;
         div.innerHTML = `<div class="title">${displayName}</div>`;
         
-        if (isNormalized) {
-          // 정규화된 경우 level 표기
+        if (mode === 'variable' && isNormalized) {
+          // 변수의 정규화된 경우 level 표기
           for (let i = 0; i < k; i++) {
             const color = getColor(i, k);
             div.innerHTML += `
@@ -455,16 +632,30 @@
               </div>`;
           }
           div.innerHTML += `<div class="meta">Level 1 (낮음) ~ Level ${k} (높음)</div>`;
+        } else if (mode === 'vulnerability') {
+          // 취약지수는 녹황적 색상
+          for (let i = 0; i < k; i++) {
+            const from = breaks[i];
+            const to = breaks[i + 1];
+            const color = getVulnerabilityColor(i, k);
+            div.innerHTML += `
+              <div class="item">
+                <span class="swatch" style="background:${color}"></span>
+                <span>${fmt(from, true)} – ${fmt(to, true)}</span>
+              </div>`;
+          }
+          div.innerHTML += `<div class="meta">녹색(안전) → 황색(보통) → 적색(취약)</div>`;
         } else {
-          // 원본 값인 경우 기존 방식
+          // 원본 값 또는 도메인 점수
           for (let i = 0; i < k; i++) {
             const from = breaks[i];
             const to = breaks[i + 1];
             const color = getColor(i, k);
+            const isDomain = mode === 'domain';
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${fmt(from)} – ${fmt(to)}</span>
+                <span>${fmt(from, isDomain)} – ${fmt(to, isDomain)}</span>
               </div>`;
           }
           div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
@@ -474,28 +665,26 @@
       legendControl.addTo(map);
     }
 
-    function styleFeature(feature, varName, breaks, k) {
-      let v = feature.properties[varName];
-      
-      // 정규화된 값 사용 (미리 계산되어 properties에 저장됨)
-      if (isNormalized && feature.properties[varName + '_normalized'] !== undefined) {
-        v = feature.properties[varName + '_normalized'];
-      }
+    function styleFeature(feature, dataKey, breaks, k, mode = 'variable') {
+      let v = feature.properties[dataKey];
       
       if (v === null || v === undefined || Number.isNaN(v)) {
         return { color: "#9ca3af", weight: 1, fillOpacity: 0.25, fillColor: "#e5e7eb" };
       }
+      
       let idx = k - 1;
       for (let i = 0; i < k; i++) {
         if (v <= breaks[i + 1]) { idx = i; break; }
       }
-      return { color: "#6b7280", weight: 1, fillOpacity: 0.78, fillColor: getColor(idx, k) };
+      
+      const colorFunc = mode === 'vulnerability' ? getVulnerabilityColor : getColor;
+      return { color: "#6b7280", weight: 1, fillOpacity: 0.78, fillColor: colorFunc(idx, k) };
     }
 
-    function render(varName) {
+    function renderVariable(varName) {
       if (!geoData) return;
+      currentMode = 'variable';
 
-      // 원본 값 추출
       const rawVals = geoData.features
         .map(f => f.properties[varName])
         .filter(v => typeof v === "number" && !Number.isNaN(v));
@@ -505,37 +694,32 @@
         return;
       }
 
-      // 정규화 적용
       let vals = rawVals;
+      let dataKey = varName;
+      
       if (isNormalized) {
-        const allVals = geoData.features.map(f => f.properties[varName]);
-        const normalized = normalizeToRange(allVals);
-        
-        // 정규화된 값을 각 feature의 properties에 임시 저장
-        geoData.features.forEach((f, idx) => {
-          f.properties[varName + '_normalized'] = normalized[idx];
-        });
-        
-        vals = normalized.filter(v => typeof v === "number" && !Number.isNaN(v));
+        // 0~10 정규화된 값 사용
+        vals = geoData.features
+          .map(f => f.properties[varName + '_normalized_0_10'])
+          .filter(v => typeof v === "number" && !Number.isNaN(v));
+        dataKey = varName + '_normalized_0_10';
       }
 
       const uniq = Array.from(new Set(vals)).length;
       const kEff = Math.max(2, Math.min(K_VALUE, uniq));
-      const breaks = computeNaturalBreaks(vals, kEff); // kEff+1
+      const breaks = computeNaturalBreaks(vals, kEff);
 
       if (geoLayer) geoLayer.remove();
 
       geoLayer = L.geoJSON(geoData, {
-        style: (f) => styleFeature(f, varName, breaks, kEff),
+        style: (f) => styleFeature(f, dataKey, breaks, kEff, 'variable'),
         onEachFeature: (feature, layer) => {
           const nm = feature.properties[NAME_FIELD] ?? "";
-          let v = feature.properties[varName];
-          let displayValue = v;
+          let displayValue = feature.properties[varName];
           
-          // 툴팁에 표시할 값 결정
-          if (isNormalized && feature.properties[varName + '_normalized'] !== undefined) {
-            displayValue = feature.properties[varName + '_normalized'];
-            const level = Math.round(displayValue);
+          if (isNormalized) {
+            const normVal = feature.properties[varName + '_normalized_0_10'];
+            const level = Math.round(normVal);
             layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${level} level`, { sticky: true });
           } else {
             layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${fmt(displayValue)}`, { sticky: true });
@@ -547,27 +731,111 @@
         map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
       } catch (e) {}
 
-      buildLegend(breaks, kEff, varName);
+      buildLegend(breaks, kEff, varName, 'variable');
+    }
+
+    function renderDomain(domainName) {
+      if (!geoData) return;
+      currentMode = 'domain';
+
+      const dataKey = 'domain_' + domainName;
+      const vals = geoData.features
+        .map(f => f.properties[dataKey])
+        .filter(v => typeof v === "number" && !Number.isNaN(v));
+
+      if (vals.length === 0) {
+        alert(`'${domainName}' 도메인 점수를 계산할 수 없습니다.`);
+        return;
+      }
+
+      const uniq = Array.from(new Set(vals)).length;
+      const kEff = Math.max(2, Math.min(K_VALUE, uniq));
+      const breaks = computeNaturalBreaks(vals, kEff);
+
+      if (geoLayer) geoLayer.remove();
+
+      geoLayer = L.geoJSON(geoData, {
+        style: (f) => styleFeature(f, dataKey, breaks, kEff, 'domain'),
+        onEachFeature: (feature, layer) => {
+          const nm = feature.properties[NAME_FIELD] ?? "";
+          const score = feature.properties[dataKey];
+          layer.bindTooltip(`<b>${nm}</b><br/>${domainName}: ${fmt(score, true)}점`, { sticky: true });
+        }
+      }).addTo(map);
+
+      try {
+        map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
+      } catch (e) {}
+
+      const scoreRange = DOMAIN_SCORES[domainName];
+      const displayName = `${domainName} (${scoreRange.min}~${scoreRange.max}점)`;
+      buildLegend(breaks, kEff, displayName, 'domain');
+    }
+
+    function renderVulnerability() {
+      if (!geoData) return;
+      currentMode = 'vulnerability';
+
+      const dataKey = 'vulnerability_index';
+      const vals = geoData.features
+        .map(f => f.properties[dataKey])
+        .filter(v => typeof v === "number" && !Number.isNaN(v));
+
+      if (vals.length === 0) {
+        alert('환경보건 취약지수를 계산할 수 없습니다.');
+        return;
+      }
+
+      const uniq = Array.from(new Set(vals)).length;
+      const kEff = Math.max(2, Math.min(K_VALUE, uniq));
+      const breaks = computeNaturalBreaks(vals, kEff);
+
+      if (geoLayer) geoLayer.remove();
+
+      geoLayer = L.geoJSON(geoData, {
+        style: (f) => styleFeature(f, dataKey, breaks, kEff, 'vulnerability'),
+        onEachFeature: (feature, layer) => {
+          const nm = feature.properties[NAME_FIELD] ?? "";
+          const score = feature.properties[dataKey];
+          layer.bindTooltip(`<b>${nm}</b><br/>환경보건 취약지수: ${fmt(score, true)}`, { sticky: true });
+        }
+      }).addTo(map);
+
+      try {
+        map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
+      } catch (e) {}
+
+      buildLegend(breaks, kEff, '환경보건 취약지수', 'vulnerability');
     }
 
     // 이미지 내보내기 함수
     function exportMapAsImage() {
       const mapElement = document.getElementById('map');
-      const varSelect = document.getElementById('varSelect');
-      const varName = varSelect.value;
-      const normalizeText = isNormalized ? '_정규화' : '';
+      let fileName = '울산_환경보건취약지수';
       
-      // html2canvas로 지도 캡처
+      if (currentMode === 'variable') {
+        const varSelect = document.getElementById('varSelect');
+        const varName = varSelect.value;
+        const normalizeText = isNormalized ? '_정규화' : '';
+        fileName += `_${varName}${normalizeText}`;
+      } else if (currentMode === 'domain') {
+        const domainSelect = document.getElementById('domainSelect');
+        const domainName = domainSelect.value;
+        fileName += `_${domainName}`;
+      } else if (currentMode === 'vulnerability') {
+        fileName += '_종합취약지수';
+      }
+      
+      const timestamp = new Date().toISOString().slice(0, 10);
+      
       html2canvas(mapElement, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        scale: 2 // 고해상도
+        scale: 2
       }).then(canvas => {
-        // Canvas를 이미지로 변환
         const link = document.createElement('a');
-        const timestamp = new Date().toISOString().slice(0, 10);
-        link.download = `울산_환경보건취약지수_${varName}${normalizeText}_${timestamp}.png`;
+        link.download = `${fileName}_${timestamp}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
       }).catch(err => {
@@ -581,7 +849,9 @@
       const candidates = Object.keys(props).filter(k => 
         k !== NAME_FIELD && 
         k !== "join_key" && 
-        !k.endsWith("_normalized") // 정규화된 임시 필드 제외
+        !k.endsWith("_normalized_0_10") &&
+        !k.startsWith("domain_") &&
+        k !== "vulnerability_index"
       );
       const vars = candidates.filter(vn =>
         geojson.features.some(f => typeof f.properties[vn] === "number" && !Number.isNaN(f.properties[vn]))
@@ -593,9 +863,17 @@
       const res = await fetch(GEOJSON_URL);
       geoData = await res.json();
 
+      // 모든 변수를 0~10으로 정규화
+      normalizeAllVariables();
+      
+      // 도메인 점수 계산
+      calculateDomainScores();
+
       const varSelect = document.getElementById("varSelect");
+      const domainSelect = document.getElementById("domainSelect");
       const resetBtn = document.getElementById("resetBtn");
       const exportBtn = document.getElementById("exportBtn");
+      const vulnerabilityBtn = document.getElementById("vulnerabilityBtn");
       const normalizeToggle = document.getElementById("normalizeToggle");
       const normalizeStatus = document.getElementById("normalizeStatus");
 
@@ -607,13 +885,29 @@
 
       varSelect.innerHTML = vars.map(v => `<option value="${v}">${v}</option>`).join("");
 
-      const defaultVar = vars.includes("인구밀도") ? "인구밀도" : vars[0];
+      const defaultVar = vars.includes("인구밀도(명/k㎡)") ? "인구밀도(명/k㎡)" : vars[0];
       varSelect.value = defaultVar;
 
-      render(defaultVar);
+      renderVariable(defaultVar);
 
       // 변수 선택 변경 시
-      varSelect.addEventListener("change", () => render(varSelect.value));
+      varSelect.addEventListener("change", () => {
+        domainSelect.value = "";
+        renderVariable(varSelect.value);
+      });
+
+      // 도메인 선택 변경 시
+      domainSelect.addEventListener("change", () => {
+        if (domainSelect.value) {
+          renderDomain(domainSelect.value);
+        }
+      });
+
+      // 환경보건 취약지수 버튼
+      vulnerabilityBtn.addEventListener("click", () => {
+        domainSelect.value = "";
+        renderVulnerability();
+      });
 
       // 지도 초기화 버튼
       resetBtn.addEventListener("click", () => {
@@ -627,10 +921,12 @@
 
       // 정규화 토글
       normalizeToggle.addEventListener("click", () => {
-        isNormalized = !isNormalized;
-        normalizeToggle.classList.toggle("active");
-        normalizeStatus.textContent = isNormalized ? "ON" : "OFF";
-        render(varSelect.value);
+        if (currentMode === 'variable') {
+          isNormalized = !isNormalized;
+          normalizeToggle.classList.toggle("active");
+          normalizeStatus.textContent = isNormalized ? "ON" : "OFF";
+          renderVariable(varSelect.value);
+        }
       });
     }
 
