@@ -9,6 +9,10 @@
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.css"
+  />
 
   <style>
     /* ===== Base Reset ===== */
@@ -376,7 +380,7 @@
 
           <div class="hint" style="margin-top: 12px;">
             <div>※ 각 도메인별 변수들의 평균 점수</div>
-            <div style="margin-top:6px;">※ 소수점 한자리로 표시</div>
+            <div style="margin-top:6px;">※ 소수점 한자리로 표시(반올림)</div>
           </div>
         </div>
 
@@ -387,7 +391,7 @@
           </div>
 
           <button class="btn" id="vulnerabilityBtn" type="button">
-            🎯 환경보건 취약지수 보기
+            환경보건 취약지수 보기
           </button>
 
           <div class="hint" style="margin-top: 12px;">
@@ -403,7 +407,7 @@
           </div>
 
           <div style="margin-top: 10px;">
-            <button class="btn" id="exportBtn" type="button">📸 이미지로 저장</button>
+            <button class="btn" id="exportBtn" type="button">이미지로 저장</button>
           </div>
 
           <div class="hint" style="margin-top: 12px;">
@@ -424,7 +428,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.js"></script>
 
   <script>
     // ====== 도메인별 변수 매핑 (필요시 수정) ======
@@ -498,6 +502,17 @@
         5:  ["#ffffcc","#fed976","#feb24c","#fd8d3c","#e31a1c"],
         7:  ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#f03b20","#bd0026"],
         10: ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#bd0026","#800026","#4d0018"]
+      };
+      const pal = ramps[k] || ramps[10];
+      return pal[Math.min(idx, pal.length - 1)];
+    }
+
+    // 도메인용 색상 팔레트 (연한 황색 -> 푸른색)
+    function getDomainColor(idx, k) {
+      const ramps = {
+        5:  ["#ffffcc","#c7e9c0","#a1d99b","#74c476","#238b45"],
+        7:  ["#ffffcc","#d9f0a3","#addd8e","#78c679","#41ab5d","#238b45","#005a32"],
+        10: ["#ffffcc","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238b45","#006d2c","#00441b","#003d19"]
       };
       const pal = ramps[k] || ramps[10];
       return pal[Math.min(idx, pal.length - 1)];
@@ -645,17 +660,29 @@
               </div>`;
           }
           div.innerHTML += `<div class="meta">녹색(안전) → 황색(보통) → 적색(취약)</div>`;
+        } else if (mode === 'domain') {
+          // 도메인 점수는 황색~푸른색
+          for (let i = 0; i < k; i++) {
+            const from = breaks[i];
+            const to = breaks[i + 1];
+            const color = getDomainColor(i, k);
+            div.innerHTML += `
+              <div class="item">
+                <span class="swatch" style="background:${color}"></span>
+                <span>${fmt(from, true)} – ${fmt(to, true)}</span>
+              </div>`;
+          }
+          div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
         } else {
-          // 원본 값 또는 도메인 점수
+          // 원본 값
           for (let i = 0; i < k; i++) {
             const from = breaks[i];
             const to = breaks[i + 1];
             const color = getColor(i, k);
-            const isDomain = mode === 'domain';
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${fmt(from, isDomain)} – ${fmt(to, isDomain)}</span>
+                <span>${fmt(from)} – ${fmt(to)}</span>
               </div>`;
           }
           div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
@@ -677,7 +704,13 @@
         if (v <= breaks[i + 1]) { idx = i; break; }
       }
       
-      const colorFunc = mode === 'vulnerability' ? getVulnerabilityColor : getColor;
+      let colorFunc = getColor; // 기본: 변수용 색상
+      if (mode === 'vulnerability') {
+        colorFunc = getVulnerabilityColor;
+      } else if (mode === 'domain') {
+        colorFunc = getDomainColor;
+      }
+      
       return { color: "#6b7280", weight: 1, fillOpacity: 0.78, fillColor: colorFunc(idx, k) };
     }
 
@@ -808,9 +841,30 @@
       buildLegend(breaks, kEff, '환경보건 취약지수', 'vulnerability');
     }
 
-    // 이미지 내보내기 함수
+    // 이미지 내보내기 함수 (leaflet-easyprint 사용)
+    let printControl = null;
+    
+    function initPrintControl() {
+      if (printControl) return;
+      
+      // easyPrint 컨트롤 생성 (숨김)
+      printControl = L.easyPrint({
+        title: '지도 이미지로 저장',
+        position: 'topleft',
+        exportOnly: true,
+        hideControlContainer: true,
+        sizeModes: ['Current'],
+        filename: 'ulsan_map',
+        hideClasses: ['leaflet-control-zoom', 'leaflet-control-attribution'],
+        customWindowTitle: '울산 환경보건 취약지수'
+      });
+      
+      map.addControl(printControl);
+    }
+    
     function exportMapAsImage() {
-      const mapElement = document.getElementById('map');
+      if (!printControl) initPrintControl();
+      
       let fileName = '울산_환경보건취약지수';
       
       if (currentMode === 'variable') {
@@ -827,21 +881,10 @@
       }
       
       const timestamp = new Date().toISOString().slice(0, 10);
+      printControl.options.filename = `${fileName}_${timestamp}`;
       
-      html2canvas(mapElement, {
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        scale: 2
-      }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `${fileName}_${timestamp}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-      }).catch(err => {
-        console.error('이미지 생성 실패:', err);
-        alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
-      });
+      // 이미지 내보내기 실행
+      printControl.printMap('CurrentSize', fileName);
     }
 
     function populateVarsFromGeoJSON(geojson) {
@@ -868,6 +911,9 @@
       
       // 도메인 점수 계산
       calculateDomainScores();
+      
+      // 프린트 컨트롤 초기화
+      initPrintControl();
 
       const varSelect = document.getElementById("varSelect");
       const domainSelect = document.getElementById("domainSelect");
