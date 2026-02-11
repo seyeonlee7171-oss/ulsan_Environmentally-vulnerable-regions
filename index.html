@@ -164,6 +164,13 @@
       transform: translateY(0px);
       box-shadow: none;
     }
+    #exportBtn {
+      background: #10b981;
+    }
+    #exportBtn:hover {
+      background: #059669;
+      box-shadow: 0 10px 18px rgba(16,185,129,0.28);
+    }
 
     /* ===== Toggle Button ===== */
     .toggle-container {
@@ -349,6 +356,10 @@
           <div style="margin-top: 14px;">
             <button class="btn" id="resetBtn" type="button">지도 초기화(전체보기)</button>
           </div>
+
+          <div style="margin-top: 10px;">
+            <button class="btn" id="exportBtn" type="button" style="background: #10b981;">📸 이미지로 저장</button>
+          </div>
         </div>
       </aside>
 
@@ -364,6 +375,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <script>
     // ====== 설정 ======
@@ -395,7 +407,7 @@
       if (v === null || v === undefined || Number.isNaN(v)) return "NA";
       const n = parseFloat(v);
       if (isNormalized) {
-        return n.toFixed(2); // 정규화된 값은 소수점 2자리
+        return Math.round(n).toString(); // 정규화된 값은 정수로 표시
       }
       return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
@@ -429,19 +441,34 @@
       legendControl = L.control({ position: "bottomright" });
       legendControl.onAdd = function () {
         const div = L.DomUtil.create("div", "legend");
-        const displayName = isNormalized ? `${varName} (정규화 1~10)` : varName;
+        const displayName = varName;
         div.innerHTML = `<div class="title">${displayName}</div>`;
-        for (let i = 0; i < k; i++) {
-          const from = breaks[i];
-          const to = breaks[i + 1];
-          const color = getColor(i, k);
-          div.innerHTML += `
-            <div class="item">
-              <span class="swatch" style="background:${color}"></span>
-              <span>${fmt(from)} – ${fmt(to)}</span>
-            </div>`;
+        
+        if (isNormalized) {
+          // 정규화된 경우 level 표기
+          for (let i = 0; i < k; i++) {
+            const color = getColor(i, k);
+            div.innerHTML += `
+              <div class="item">
+                <span class="swatch" style="background:${color}"></span>
+                <span>${i + 1} level</span>
+              </div>`;
+          }
+          div.innerHTML += `<div class="meta">Level 1 (낮음) ~ Level ${k} (높음)</div>`;
+        } else {
+          // 원본 값인 경우 기존 방식
+          for (let i = 0; i < k; i++) {
+            const from = breaks[i];
+            const to = breaks[i + 1];
+            const color = getColor(i, k);
+            div.innerHTML += `
+              <div class="item">
+                <span class="swatch" style="background:${color}"></span>
+                <span>${fmt(from)} – ${fmt(to)}</span>
+              </div>`;
+          }
+          div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
         }
-        div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
         return div;
       };
       legendControl.addTo(map);
@@ -508,10 +535,11 @@
           // 툴팁에 표시할 값 결정
           if (isNormalized && feature.properties[varName + '_normalized'] !== undefined) {
             displayValue = feature.properties[varName + '_normalized'];
+            const level = Math.round(displayValue);
+            layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${level} level`, { sticky: true });
+          } else {
+            layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${fmt(displayValue)}`, { sticky: true });
           }
-          
-          const label = isNormalized ? `${varName} (정규화)` : varName;
-          layer.bindTooltip(`<b>${nm}</b><br/>${label}: ${fmt(displayValue)}`, { sticky: true });
         }
       }).addTo(map);
 
@@ -520,6 +548,32 @@
       } catch (e) {}
 
       buildLegend(breaks, kEff, varName);
+    }
+
+    // 이미지 내보내기 함수
+    function exportMapAsImage() {
+      const mapElement = document.getElementById('map');
+      const varSelect = document.getElementById('varSelect');
+      const varName = varSelect.value;
+      const normalizeText = isNormalized ? '_정규화' : '';
+      
+      // html2canvas로 지도 캡처
+      html2canvas(mapElement, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2 // 고해상도
+      }).then(canvas => {
+        // Canvas를 이미지로 변환
+        const link = document.createElement('a');
+        const timestamp = new Date().toISOString().slice(0, 10);
+        link.download = `울산_환경보건취약지수_${varName}${normalizeText}_${timestamp}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }).catch(err => {
+        console.error('이미지 생성 실패:', err);
+        alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
+      });
     }
 
     function populateVarsFromGeoJSON(geojson) {
@@ -541,6 +595,7 @@
 
       const varSelect = document.getElementById("varSelect");
       const resetBtn = document.getElementById("resetBtn");
+      const exportBtn = document.getElementById("exportBtn");
       const normalizeToggle = document.getElementById("normalizeToggle");
       const normalizeStatus = document.getElementById("normalizeStatus");
 
@@ -563,6 +618,11 @@
       // 지도 초기화 버튼
       resetBtn.addEventListener("click", () => {
         if (geoLayer) map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
+      });
+
+      // 이미지 내보내기 버튼
+      exportBtn.addEventListener("click", () => {
+        exportMapAsImage();
       });
 
       // 정규화 토글
