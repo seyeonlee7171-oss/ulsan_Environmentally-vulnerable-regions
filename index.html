@@ -307,6 +307,23 @@
       color: #6b7280;
     }
 
+    /* ===== Leaflet Tooltip z-index ===== */
+    .leaflet-tooltip {
+      z-index: 9999 !important;
+    }
+    .leaflet-tooltip-pane {
+      z-index: 9999 !important;
+    }
+
+    /* ===== Export Mode (이미지 저장 시에만 적용) ===== */
+    .exporting .leaflet-container {
+      background: #ffffff !important;
+    }
+    .exporting .legend {
+      backdrop-filter: none !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+    }
+
     /* ===== Responsive ===== */
     @media (max-width: 980px) {
       body { padding: 10px; }
@@ -357,7 +374,7 @@
           </div>
 
           <div class="hint" style="margin-top: 12px;">
-            <div>※ 정규화 ON: 각 변수별 점수를 1~10 level로 표시(실제 점수는 0~10 사이의 실수)</div>
+            <div>※ 정규화 ON: 0~10 점수를 1~10 level로 표시</div>
             <div style="margin-top:6px;">※ 정규화 OFF: 원본 데이터 값 그대로 표시</div>
           </div>
         </div>
@@ -380,7 +397,7 @@
 
           <div class="hint" style="margin-top: 12px;">
             <div>※ 각 도메인별 변수들의 평균 점수</div>
-            <div style="margin-top:6px;">※ 소수점 한자리 표시(반올림)</div>
+            <div style="margin-top:6px;">※ 소수점 한자리로 표시(반올림)</div>
           </div>
         </div>
 
@@ -403,15 +420,13 @@
         <!-- 기타 기능 카드 -->
         <div class="panel-card">
           <div style="margin-top: 0px;">
-            <button class="btn" id="resetBtn" type="button">지도 초기화(전체보기)</button>
-          </div>
-
-          <div style="margin-top: 10px;">
             <button class="btn" id="exportBtn" type="button">이미지로 저장</button>
           </div>
 
           <div class="hint" style="margin-top: 12px;">
-            <div>데이터 파일: <code>ulsan_dong_indicators.geojson</code></div>
+            <div>※ 흰 배경 + 행정동 폴리곤 + 범례 포함</div>
+            <div style="margin-top:6px;">※ 타일맵 제외, 깔끔한 PNG 이미지로 저장</div>
+            <div style="margin-top:6px;">데이터: <code>ulsan_dong_indicators.geojson</code></div>
           </div>
         </div>
       </aside>
@@ -507,12 +522,12 @@
       return pal[Math.min(idx, pal.length - 1)];
     }
 
-    // 도메인용 색상 팔레트 (연한 황색 -> 푸른색)
+    // 도메인용 색상 팔레트 (연한 황색 -> 청색)
     function getDomainColor(idx, k) {
       const ramps = {
         5:  ["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"],
-        7:  ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
-        10: ["#ffffcc","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#253494","#081d58","#042040"]
+        7:  ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#2c7fb8","#225ea8","#253494"],
+        10: ["#ffffcc","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#253494","#081d58","#081d58"]
       };
       const pal = ramps[k] || ramps[10];
       return pal[Math.min(idx, pal.length - 1)];
@@ -661,18 +676,16 @@
           }
           div.innerHTML += `<div class="meta">녹색(안전) → 황색(보통) → 적색(취약)</div>`;
         } else if (mode === 'domain') {
-          // 도메인 점수는 황색~푸른색
+          // 도메인 점수는 황색~푸른색, level 표기
           for (let i = 0; i < k; i++) {
-            const from = breaks[i];
-            const to = breaks[i + 1];
             const color = getDomainColor(i, k);
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${fmt(from, true)} – ${fmt(to, true)}</span>
+                <span>${i + 1} level</span>
               </div>`;
           }
-          div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
+          div.innerHTML += `<div class="meta">Level 1 (낮음) ~ Level ${k} (높음)</div>`;
         } else {
           // 원본 값
           for (let i = 0; i < k; i++) {
@@ -841,13 +854,53 @@
       buildLegend(breaks, kEff, '환경보건 취약지수', 'vulnerability');
     }
 
-    // 이미지 내보내기 함수 (leaflet-easyprint 사용)
+    // ===== Export 모드 관리 =====
+    
+    /**
+     * Export 모드 진입 - basemap 제거 및 흰 배경 적용
+     * 3가지 방식 중 가장 안정적인 방식 사용
+     */
+    function enterExportMode() {
+      // 방법 1: removeLayer (추천) - 가장 깔끔하고 완전한 제거
+      if (base && map.hasLayer(base)) {
+        map.removeLayer(base);
+      }
+      
+      // 흰 배경 적용
+      const mapElement = document.getElementById('map');
+      mapElement.classList.add('exporting');
+      
+      // 지도 강제 리렌더링
+      map.invalidateSize();
+      
+      console.log('Export mode: ON (basemap removed, white background applied)');
+    }
+    
+    /**
+     * Export 모드 종료 - basemap 복원 및 원래 스타일 복구
+     */
+    function leaveExportMode() {
+      // basemap 복원
+      if (base && !map.hasLayer(base)) {
+        map.addLayer(base);
+      }
+      
+      // 흰 배경 제거
+      const mapElement = document.getElementById('map');
+      mapElement.classList.remove('exporting');
+      
+      // 지도 강제 리렌더링
+      map.invalidateSize();
+      
+      console.log('Export mode: OFF (basemap restored)');
+    }
+    
+    // ===== EasyPrint 컨트롤 초기화 =====
     let printControl = null;
     
     function initPrintControl() {
       if (printControl) return;
       
-      // easyPrint 컨트롤 생성 (숨김)
       printControl = L.easyPrint({
         title: '지도 이미지로 저장',
         position: 'topleft',
@@ -855,16 +908,22 @@
         hideControlContainer: true,
         sizeModes: ['Current'],
         filename: 'ulsan_map',
+        // 범례가 숨겨지지 않도록 hideClasses에서 제외
         hideClasses: ['leaflet-control-zoom', 'leaflet-control-attribution'],
+        // 타일 로딩 완료 대기
+        tileWait: 500,
         customWindowTitle: '울산 환경보건 취약지수'
       });
       
-      map.addControl(printControl);
+      // 컨트롤을 지도에 추가하지만 숨김
+      printControl.addTo(map);
     }
     
-    function exportMapAsImage() {
+    // ===== 이미지 내보내기 메인 함수 =====
+    async function exportMapAsImage() {
       if (!printControl) initPrintControl();
       
+      // 파일명 생성
       let fileName = '울산_환경보건취약지수';
       
       if (currentMode === 'variable') {
@@ -883,9 +942,114 @@
       const timestamp = new Date().toISOString().slice(0, 10);
       printControl.options.filename = `${fileName}_${timestamp}`;
       
-      // 이미지 내보내기 실행
-      printControl.printMap('CurrentSize', fileName);
+      try {
+        console.log('=== Image Export Started ===');
+        console.log('Filename:', `${fileName}_${timestamp}.png`);
+        
+        // 1. Export 모드 진입
+        enterExportMode();
+        
+        // 2. 폰트 및 DOM 렌더링 완료 대기
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+        }
+        
+        // 3. 프레임 렌더링 대기 (2 frames)
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+          });
+        });
+        
+        // 4. 추가 안정화 대기 (100ms)
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 5. 이미지 캡처 실행
+        console.log('Capturing map image...');
+        printControl.printMap('CurrentSize', fileName);
+        
+        // 6. 캡처 완료 대기 (easyPrint 내부 처리 시간)
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log('=== Image Export Completed ===');
+        
+      } catch (error) {
+        console.error('Image export failed:', error);
+        alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
+      } finally {
+        // 7. 반드시 Export 모드 종료 (에러 발생 시에도)
+        leaveExportMode();
+      }
     }
+    
+    /*
+    ===== Basemap 제거 방식 비교 =====
+    
+    방법 1: removeLayer / addLayer (현재 적용) ✅ 추천
+    - 장점: 
+      * 가장 깔끔하고 완전한 제거
+      * 타일 요청 중단, 메모리 해제
+      * 캡처 결과가 가장 안정적
+    - 단점:
+      * 복원 시 타일 재로딩 (약간의 지연)
+    - 사용: map.removeLayer(base) / map.addLayer(base)
+    
+    방법 2: setOpacity
+    - 장점:
+      * 레이어 유지로 복원 빠름
+      * 타일 캐시 유지
+    - 단점:
+      * opacity=0이어도 타일이 캡처에 희미하게 포함될 수 있음
+      * 완전한 제거가 아님
+    - 사용: base.setOpacity(0) / base.setOpacity(1)
+    
+    방법 3: container display
+    - 장점:
+      * CSS 레벨 제어
+      * 레이어 객체 유지
+    - 단점:
+      * Leaflet 내부 상태와 불일치 가능
+      * display:none이 캡처 프로세스를 방해할 수 있음
+      * 크로스 브라우저 호환성 이슈
+    - 사용: base.getContainer().style.display='none' / 'block'
+    
+    결론: 방법 1 (removeLayer) 사용 권장
+    - 깔끔한 흰 배경 보장
+    - 타일 잔상 없음
+    - 복원 시 약간의 지연은 사용자 경험에 큰 영향 없음
+    */
+    
+    /*
+    ===== 범례 누락 방지 체크리스트 =====
+    
+    1. hideClasses 확인 ✅
+       - 'legend' 클래스가 hideClasses에 포함되지 않았는지 확인
+       - 현재: ['leaflet-control-zoom', 'leaflet-control-attribution']
+       - legend 관련 클래스 제외됨
+    
+    2. z-index 확인 ✅
+       - legend의 z-index가 충분히 높은지 확인
+       - 현재: CSS에서 별도 설정 없으나 Leaflet control 기본값 사용
+       - 필요시 .legend { z-index: 1000; } 추가 가능
+    
+    3. position 확인 ✅
+       - legendControl.options.position = 'bottomright'
+       - Leaflet이 자동으로 올바른 위치에 배치
+    
+    4. backdrop-filter 제거 ✅
+       - export 모드에서 .exporting .legend { backdrop-filter: none; }
+       - 캡처 아티팩트 방지
+    
+    5. 캡처 범위 확인 ✅
+       - easyPrint는 .leaflet-container 전체를 캡처
+       - legend가 .leaflet-control-container 내부에 있어 자동 포함
+    
+    6. 렌더링 타이밍 ✅
+       - document.fonts.ready 대기
+       - requestAnimationFrame 2회 대기
+       - 100ms 추가 대기
+       - 충분한 렌더링 시간 보장
+    */
 
     function populateVarsFromGeoJSON(geojson) {
       const props = geojson.features?.[0]?.properties || {};
@@ -912,12 +1076,11 @@
       // 도메인 점수 계산
       calculateDomainScores();
       
-      // 프린트 컨트롤 초기화
+      // EasyPrint 컨트롤 초기화
       initPrintControl();
 
       const varSelect = document.getElementById("varSelect");
       const domainSelect = document.getElementById("domainSelect");
-      const resetBtn = document.getElementById("resetBtn");
       const exportBtn = document.getElementById("exportBtn");
       const vulnerabilityBtn = document.getElementById("vulnerabilityBtn");
       const normalizeToggle = document.getElementById("normalizeToggle");
@@ -955,11 +1118,6 @@
         renderVulnerability();
       });
 
-      // 지도 초기화 버튼
-      resetBtn.addEventListener("click", () => {
-        if (geoLayer) map.fitBounds(geoLayer.getBounds(), { padding: [14, 14] });
-      });
-
       // 이미지 내보내기 버튼
       exportBtn.addEventListener("click", () => {
         exportMapAsImage();
@@ -980,4 +1138,3 @@
   </script>
 </body>
 </html>
-
