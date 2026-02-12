@@ -309,10 +309,21 @@
 
     /* ===== Leaflet Tooltip z-index ===== */
     .leaflet-tooltip {
-      z-index: 9999 !important;
+      z-index: 99999 !important;
+      position: relative !important;
     }
     .leaflet-tooltip-pane {
-      z-index: 9999 !important;
+      z-index: 99999 !important;
+    }
+    .leaflet-pane {
+      z-index: auto !important;
+    }
+    .leaflet-overlay-pane {
+      z-index: 400 !important;
+    }
+    .leaflet-tooltip-pane {
+      z-index: 99999 !important;
+      pointer-events: none !important;
     }
 
     /* ===== Export Mode (이미지 저장 시에만 적용) ===== */
@@ -652,50 +663,52 @@
         div.innerHTML = `<div class="title">${displayName}</div>`;
         
         if (mode === 'variable' && isNormalized) {
-          // 변수의 정규화된 경우 level 표기
+          // 변수의 정규화된 경우 숫자만 표기 (level 제거)
           for (let i = 0; i < k; i++) {
             const color = getColor(i, k);
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${i + 1} level</span>
+                <span>${i + 1}</span>
               </div>`;
           }
-          div.innerHTML += `<div class="meta">Level 1 (낮음) ~ Level ${k} (높음)</div>`;
+          div.innerHTML += `<div class="meta">1 (낮음) ~ ${k} (높음)</div>`;
         } else if (mode === 'vulnerability') {
-          // 취약지수는 녹황적 색상
+          // 취약지수는 중앙값만 표기
           for (let i = 0; i < k; i++) {
             const from = breaks[i];
             const to = breaks[i + 1];
+            const midValue = (from + to) / 2;
             const color = getVulnerabilityColor(i, k);
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${fmt(from, true)} – ${fmt(to, true)}</span>
+                <span>${fmt(midValue, true)}</span>
               </div>`;
           }
           div.innerHTML += `<div class="meta">녹색(안전) → 황색(보통) → 적색(취약)</div>`;
         } else if (mode === 'domain') {
-          // 도메인 점수는 황색~푸른색, level 표기
+          // 도메인 점수는 숫자만 표기 (level 제거)
           for (let i = 0; i < k; i++) {
             const color = getDomainColor(i, k);
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${i + 1} level</span>
+                <span>${i + 1}</span>
               </div>`;
           }
-          div.innerHTML += `<div class="meta">Level 1 (낮음) ~ Level ${k} (높음)</div>`;
+          div.innerHTML += `<div class="meta">1 (낮음) ~ ${k} (높음)</div>`;
         } else {
-          // 원본 값
+          // 원본 값은 중앙값만 표기
           for (let i = 0; i < k; i++) {
             const from = breaks[i];
             const to = breaks[i + 1];
+            const midValue = (from + to) / 2;
             const color = getColor(i, k);
             div.innerHTML += `
               <div class="item">
                 <span class="swatch" style="background:${color}"></span>
-                <span>${fmt(from)} – ${fmt(to)}</span>
+                <span>${fmt(midValue)}</span>
               </div>`;
           }
           div.innerHTML += `<div class="meta">Natural Breaks, k=${k}</div>`;
@@ -766,7 +779,7 @@
           if (isNormalized) {
             const normVal = feature.properties[varName + '_normalized_0_10'];
             const level = Math.round(normVal);
-            layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${level} level`, { sticky: true });
+            layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${level}`, { sticky: true });
           } else {
             layer.bindTooltip(`<b>${nm}</b><br/>${varName}: ${fmt(displayValue)}`, { sticky: true });
           }
